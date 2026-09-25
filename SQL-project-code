@@ -1,0 +1,263 @@
+-- PROJECT --
+CREATE DATABASE HOSPITAL_DB;
+USE HOSPITAL_DB;
+
+CREATE TABLE DOCTORS(
+    DOCTOR_ID VARCHAR(20) PRIMARY KEY,
+    DOCTOR_NAME VARCHAR(50) NOT NULL,
+    SPECIALITY VARCHAR(50) NOT NULL,
+    HIRE_DATE DATE NOT NULL,
+    RATING DECIMAL(3,2) CHECK(RATING>=0),
+    EMPLOYMENT_TYPE VARCHAR(40) NOT NULL,
+    IS_ACTIVE VARCHAR(3)
+);
+
+CREATE TABLE PATIENTS(
+    PATIENT_ID VARCHAR(20) PRIMARY KEY,
+    PATIENT_NAME VARCHAR(100) NOT NULL,
+    AGE INT NOT NULL,
+    GENDER VARCHAR(10) NOT NULL,
+    CITY VARCHAR(50) NOT NULL,
+    PATIENT_TYPE VARCHAR(20) NOT NULL,
+    PREFERRED_TIME_SLOT VARCHAR(20) NOT NULL,
+    REG_DATE DATE NOT NULL
+);
+
+CREATE TABLE ROOMS(
+	ROOM_ID VARCHAR(20) PRIMARY KEY,
+	ROOM_TYPE VARCHAR(30) NOT NULL,
+	ROOM_FLOOR INT NOT NULL,
+	EQUIPMENT_TYPE VARCHAR(50) NOT NULL,
+	CAPACITY INT NOT NULL,
+	LAST_MAINTENANCE_DATE DATE,
+	IS_AVAILABLE VARCHAR(3)
+);
+
+CREATE TABLE APPOINTMENTS(
+    APPOINTMENT_ID VARCHAR(20) PRIMARY KEY,
+    PATIENT_ID VARCHAR(20) NOT NULL,
+    APPOINTMENT_DATE DATE NOT NULL,
+    DOCTOR_ID VARCHAR(20) NOT NULL,
+    SERVICE_TYPE VARCHAR(50) NOT NULL,
+    PRIORITY VARCHAR(50) NOT NULL,
+    ESTIMATED_COST DECIMAL(10,2) CHECK(ESTIMATED_COST>0) NOT NULL,
+    BOOKING_CHANNEL VARCHAR(40) NOT NULL,
+
+    CONSTRAINT APPOINTMENT_PATIENT_ID
+    FOREIGN KEY (PATIENT_ID) REFERENCES PATIENTS(PATIENT_ID),
+    
+    CONSTRAINT APPOINTMENT_DOCTOR_ID FOREIGN KEY (DOCTOR_ID)
+    REFERENCES DOCTORS(DOCTOR_ID)
+);
+
+
+CREATE TABLE TREATMENTS(
+	TREATMENT_ID VARCHAR(20) PRIMARY KEY,
+	APPOINTMENT_ID VARCHAR(20) NOT NULL,
+	DOCTOR_ID VARCHAR(20) NOT NULL,
+	ROOM_ID VARCHAR(20) NOT NULL,
+	ACTUAL_TREATMENT_DATE DATE NOT NULL,
+	TREATMENT_STATUS VARCHAR(30) NOT NULL,
+	TREATMENT_ATTEMPT INT NOT NULL,
+	TREATMENT_DURATION_MIN INT CHECK(TREATMENT_DURATION_MIN>0) NOT NULL,
+	WAITING_TIME_MIN INT CHECK(WAITING_TIME_MIN>=0) NOT NULL,
+	TREATMENT_COST DECIMAL(10,2) CHECK(TREATMENT_COST>0) NOT NULL,
+
+	CONSTRAINT TREATMENT_APPOINTMENT_ID
+	FOREIGN KEY (APPOINTMENT_ID) REFERENCES APPOINTMENTS(APPOINTMENT_ID),
+
+	CONSTRAINT TREATMENT_DOCTOR_ID
+	FOREIGN KEY (DOCTOR_ID) REFERENCES DOCTORS(DOCTOR_ID),
+
+	CONSTRAINT TREATMENT_ROOM_ID
+	FOREIGN KEY (ROOM_ID) REFERENCES ROOMS(ROOM_ID)
+);
+
+-- Sprint 3: Basic Analysis / Data Exploration 
+-- 1. What is the total number of patients? 
+select count(*) from doctors;
+
+-- 2. What is the total number of appointments? 
+select count(*) from appointments;
+
+-- 3. What is the total number of treatment records? 
+select count(*) from treatments;
+
+-- 4. What are the different medical service types? 
+select service_type from appointments group by service_type;
+select distinct service_type from appointments;
+
+-- 5. How many doctors are currently active? 
+select count(*) as doctor_active from doctors 
+group by is_active 
+having is_active='yes';
+
+-- 6. What are the different room types? 
+select room_type from rooms group by room_type;
+
+-- 7. What is the total estimated appointment value? 
+select sum(estimated_cost) as est_appo_value from appointments;
+
+-- 8. What is the average treatment duration?
+select avg(treatment_duration_min) as treatment_duration from treatments;
+
+-- Sprint 4: Objective-Based Analysis 
+-- 4.1 Understand Patient and Appointment Demand 
+-- ● Compare appointment volume across cities. 
+select city,count(*) as appoint_vol 
+from appointments a
+join  patients p on p.patient_id=a.patient_id 
+group by city;
+
+-- ● Compare appointments across service types and priorities. 
+select service_type,priority,count(*)as appoint_across
+from appointments group by service_type,priority  ;
+
+-- ● Examine appointment volume over time. 
+select * from appointments;
+select appointment_date,count(*) as appoint_volume from 
+appointments group by appointment_date 
+order by appointment_date;
+
+--  Compare estimated appointment value across patient types. 
+select patient_type,count(*)as appointment_value,sum(estimated_cost) as est_appoint
+from appointments a join patients p on p.patient_id=a.patient_id
+group by patient_type order by patient_type;
+
+-- ● Examine booking channels and their contribution to demand.
+select * from appointments;
+select booking_channel,sum(estimated_cost)as contribution_demand
+ from appointments
+group by booking_channel 
+order by contribution_demand desc ;
+
+-- 4.2 Understand Patient Appointment Behaviour 
+-- ● Compare patients by number of appointments. 
+select patient_id,count(*) as no_of_appointment from appointments  group by patient_id
+order by no_of_appointment desc;
+
+-- ● Identify patients with higher cumulative estimated appointment value. 
+select * from patients;
+select * from appointments;
+select a.patient_id,sum(estimated_cost) as estimated_appoint from appointments a join 
+patients p on p.patient_id=a.patient_id group by a.patient_id;
+
+-- ● Compare patient activity across cities. 
+select city,count(a.patient_id) as patient_activity from patients p join appointments a on
+ p.patient_id=a.patient_id 
+group by city
+order by patient_activity ;
+-- ● Compare General, Corporate, and Insurance patients. 
+select p.patient_type,count(*) as appointment_count
+from appointments a 
+join patients p
+on p.patient_id= a.patient_id
+group by patient_type
+order by appointment_count desc;
+
+-- ● Examine patient booking patterns over time. 
+select year(appointment_date) as booking_year,month(appointment_date) as booking_month,
+count(*) as booking_count from appointments group by  year(appointment_date),
+month(appointment_date) order by booking_year,booking_month;
+
+-- 4.3 Evaluate Treatment Performance 
+-- ● Compare treatment outcomes across cities. 
+select p.city,treatment_status,
+count(treatment_id) as treatment_a from 
+patients p 
+join appointments a on 
+p.patient_id=a.patient_id join
+treatments t on
+ a.appointment_id=t.appointment_id
+group by p.city,treatment_status
+order by p.city,treatment_status;
+
+-- ● Examine treatment duration and waiting time. 
+select treatment_status,
+avg(treatment_duration_min) as avg_duration,
+avg(waiting_time_min) as waiting_time 
+from treatments group by treatment_status;
+
+-- ● Compare Completed, Cancelled, No-Show, Rescheduled, and In Progress outcomes. 
+select count(treatment_id),treatment_status as treatment_stat from treatments
+where treatment_status in ('Completed','Cancelled','No-Show','Rescheduled','in progress') 
+group by treatment_status
+ order by treatment_stat desc;
+
+-- ● Identify areas with higher treatment activity or poorer outcomes. 
+select p.city,t.treatment_status,count(treatment_id) as total_trt
+from patients p join appointments a on p.patient_id=a.patient_id
+join treatments t
+ on a.appointment_id=t.appointment_id
+GROUP BY p.city,t.treatment_status
+ORDER BY p.city,total_trt;
+-- ● Compare treatment performance over time. 
+select year(actual_treatment_date) as year,count(treatment_id) as total_treatments
+from treatments group by actual_treatment_date
+order by total_treatments;
+-- Students must formulate their own analytical questions, write multiple SQL queries, 
+-- interpret the results, and record business insights. 
+
+-- 4.4 Understand Doctor and Room Performance 
+-- ● Compare the number of treatments handled by doctors.
+select doctor_name,count(treatment_id) as no_of_treatment  from treatments t join 
+doctors d on t.doctor_id=d.doctor_id group by doctor_name
+order by no_of_treatment desc;
+-- ● Compare doctor performance across treatment outcomes. 
+select doctor_id,treatment_status,count(treatment_id) as treatment_outcomes
+from treatments group by doctor_id,treatment_status
+order by treatment_outcomes desc;
+
+-- ● Examine treatment duration across doctors.  
+select doctor_id,avg(treatment_duration_min) as avg_duration
+from treatments 
+group by doctor_id
+order by avg_duration desc;
+-- ● Compare room usage across room types and equipment types. 
+select room_type,equipment_type,count(room_id) as total_rooms from rooms
+group by equipment_type,room_type order by total_rooms desc;
+-- ● Evaluate treatment performance across rooms.
+select treatment_status,count(room_id) as performance_across from treatments 
+group by treatment_status 
+order by performance_across desc;
+
+-- 4.5 Identify Treatment and Appointment Problems 
+-- ● Identify appointments requiring multiple treatment 
+-- attempts. 
+select appointment_id,count(treatment_attempt)
+ as total_treat from treatments
+ group by appointment_id
+ having count(*)>1;
+ 
+-- ● Find common problem statuses and patterns. 
+select treatment_status,count(*) as status_count
+from treatments 
+group by treatment_status
+order by status_count desc;
+-- ● Compare waiting time for appointments 
+-- with multiple attempts. 
+select appointment_id,avg(WAITING_TIME_MIN) as waiting_time,
+count(treatment_attempt) as multiple_attempts from
+appointments group by appointment_id having count(*)>1
+order by waiting_time desc;
+desc treatments;  -- doubt--
+-- ● Identify cities or service types with more cancellations, 
+-- no-shows, or rescheduling. 
+select p.city, a.service_type,a.appointment_status,count(*) as
+total from appointments a join patients p on a.patient_id=
+a.patient_id where    -- doubt--
+ a.appointment_status in
+('cancellations','no-shows','rescheduling') 
+group by p.city,a.service_type,a.appointment_status 
+order by total desc;
+-- ● Investigate whether priority level is associated 
+SELECT 
+    a.PRIORITY,
+    COUNT(t.TREATMENT_ID) AS TOTAL_TREATMENTS,
+    AVG(t.WAITING_TIME_MIN) AS AVG_WAITING_TIME
+FROM APPOINTMENTS a
+JOIN TREATMENTS t
+    ON a.APPOINTMENT_ID = t.APPOINTMENT_ID
+GROUP BY a.PRIORITY
+ORDER BY AVG_WAITING_TIME DESC;
+-- with waiting time or treatment outcomes.
